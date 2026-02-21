@@ -3,6 +3,7 @@ import aiohttp
 import asyncio
 import datetime
 import hmac
+import math
 import logging
 from hashlib import sha1
 
@@ -12,6 +13,7 @@ from homeassistant.util.dt import get_time_zone
 
 BASE_URL = "https://timetableapi.ptv.vic.gov.au"
 DEPARTURES_PATH = "/v3/departures/route_type/{}/stop/{}/route/{}?direction_id={}&max_results={}"
+STOPPING_PATTERNS="/v3/pattern/run/{}/route_type/{}?expand=None&include_skipped_stops=false"
 DIRECTIONS_PATH = "/v3/directions/route/{}"
 MIN_TIME_BETWEEN_UPDATES = datetime.timedelta(minutes=2)
 MAX_RESULTS = 5
@@ -19,6 +21,7 @@ ROUTE_TYPES_PATH = "/v3/route_types"
 ROUTES_PATH = "/v3/routes?route_types={}"
 STOPS_PATH = "/v3/stops/route/{}/route_type/{}"
 
+exclude_disruptions=[261006,142498]
 _LOGGER = logging.getLogger(__name__)
 
 class Connector:
@@ -27,8 +30,8 @@ class Connector:
     manufacturer = "Demonstration Corp"
 
     def __init__(self, hass, id, api_key, route_type=None, route=None,
-                 direction=None, stop=None, route_type_name=None,
-                 route_name=None, direction_name=None, stop_name=None):
+                 direction=None, stop=None, destination_stop=None, route_type_name=None,
+                 route_name=None, direction_name=None, stop_name=None,destination_stop_name=None):
         """Init Public Transport Victoria connector."""
         self.hass = hass
         self.id = id
@@ -37,10 +40,12 @@ class Connector:
         self.route = route
         self.direction = direction
         self.stop = stop
+        self.destination_stop = destination_stop
         self.route_type_name = route_type_name
         self.route_name = route_name
         self.direction_name = direction_name
         self.stop_name = stop_name
+        self.destination_stop_name = destination_stop_name
 
     async def _init(self):
         """Async Init Public Transport Victoria connector."""
@@ -119,6 +124,54 @@ class Connector:
 
             return stops
 
+    async def async_stopping_patterns(self,run_ref,stop_id):
+        """Get stopping pattern from Public Transport Victoria API."""
+        url = build_URL(self.id, self.api_key, STOPPING_PATTERNS.format(run_ref, self.route_type))
+
+        async with aiohttp.ClientSession() as session:
+            response = await session.get(url)
+
+        if response is not None and response.status == 200:
+            response = await response.json()
+            _LOGGER.debug(response)
+            for r in response["departures"]:
+                if stop_id==r['stop_id']:
+                    return True
+            return False
+
+    async def async_get_disruptions(self,disruption_ids):
+        """Get disruption information from Public Transport Victoria API."""
+        disruptions = ''
+        for disruption in disruption_ids:
+            if disruption not in exclude_disruptions:
+                url = build_URL(self.id, self.api_key, DISRUPTION.format(disruption))
+
+                async with aiohttp.ClientSession() as session:
+                    response = await session.get(url)
+
+                if response is not None and response.status == 200:
+                    response = await response.json()
+                    _LOGGER.debug(response)
+                    if response["disruption"] is not None:
+                        disruptions+=response['disruption']['description']+'\n'
+        return disruptions
+        
+    async def async_get_position(self,run_ref,result):
+        """Get vehicle position information from Public Transport Victoria API."""
+        coords = {}
+        url = build_URL(self.id, self.api_key, RUN.format(run_ref))
+
+        async with aiohttp.ClientSession() as session:
+            response = await session.get(url)
+
+        if response is not None and response.status == 200:
+            response = await response.json()
+            _LOGGER.debug(response)
+            for r in response["runs"]:
+                if r['vehicle_position'] is not None:
+                    result['latitude']=r['vehicle_position']['latitude']
+                    result['longitude']=r['vehicle_position']['longitude']
+
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
     async def async_update(self):
         """Update the departure information."""
@@ -132,6 +185,9 @@ class Connector:
             _LOGGER.debug(response)
             self.departures = []
             for r in response["departures"]:
+                r['is_stopping_at_destination']=await self.async_stopping_patterns(r['run_ref'],self.destination_stop)
+                r['disruptions']=await self.async_get_disruptions(r['disruption_ids'])
+                await self.async_get_position(r['run_ref'],r)
                 if r["estimated_departure_utc"] is not None:
                     r["departure"] = convert_utc_to_local(
                         r["estimated_departure_utc"], self.hass

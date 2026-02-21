@@ -15,6 +15,8 @@ from .const import (
     CONF_ROUTE_TYPE_NAME, 
     CONF_STOP, 
     CONF_STOP_NAME, 
+	CONF_DESTINATION_STOP,
+	CONF_DESTINATION_STOP_NAME,
     DOMAIN
 )
 from .PublicTransportVictoria.public_transport_victoria import Connector
@@ -185,6 +187,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle the stops types step."""
         data_schema = vol.Schema({
             vol.Required(CONF_STOP, default=next(iter(self.stops))): vol.In(self.stops),
+            vol.Required(CONF_DESTINATION_STOP, default=next(iter(self.stops))): vol.In(self.stops)
         })
 
         errors = {}
@@ -192,10 +195,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 self.data[CONF_STOP] = user_input[CONF_STOP]
                 self.data[CONF_STOP_NAME] = self.stops[user_input[CONF_STOP]]
+                self.data[CONF_DESTINATION_STOP] = user_input[CONF_DESTINATION_STOP]
+                self.data[CONF_DESTINATION_STOP_NAME] = self.stops[user_input[CONF_DESTINATION_STOP]]
 
                 title = "{} line to {} from {}".format(
                     self.data[CONF_ROUTE_NAME],
-                    self.data[CONF_DIRECTION_NAME],
+                    self.data[CONF_DESTINATION_STOP_NAME],
                     self.data[CONF_STOP_NAME]
                 )
 
