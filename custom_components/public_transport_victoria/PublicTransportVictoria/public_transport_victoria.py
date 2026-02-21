@@ -10,16 +10,18 @@ from hashlib import sha1
 from homeassistant.util import Throttle
 from homeassistant.util.dt import get_time_zone
 
-
 BASE_URL = "https://timetableapi.ptv.vic.gov.au"
 DEPARTURES_PATH = "/v3/departures/route_type/{}/stop/{}/route/{}?direction_id={}&max_results={}"
-STOPPING_PATTERNS="/v3/pattern/run/{}/route_type/{}?expand=None&include_skipped_stops=false"
+STOPPING_PATTERNS='/v3/pattern/run/{}/route_type/{}?expand=None&include_skipped_stops=false'
+DISRUPTION='/v3/disruptions/{}'
+RUN='/v3/runs/{}?expand=VehiclePosition'
 DIRECTIONS_PATH = "/v3/directions/route/{}"
-MIN_TIME_BETWEEN_UPDATES = datetime.timedelta(minutes=2)
-MAX_RESULTS = 5
 ROUTE_TYPES_PATH = "/v3/route_types"
 ROUTES_PATH = "/v3/routes?route_types={}"
 STOPS_PATH = "/v3/stops/route/{}/route_type/{}"
+
+MIN_TIME_BETWEEN_UPDATES = datetime.timedelta(minutes=2)
+MAX_RESULTS = 5
 
 exclude_disruptions=[261006,142498]
 _LOGGER = logging.getLogger(__name__)
